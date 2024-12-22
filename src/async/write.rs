@@ -32,6 +32,7 @@ impl Future for AsyncWriteFuture {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // 如果没有注册事件，则注册事件
         if self.event_id.is_none() {
+            // println!("异步写开始");
             let waker = cx.waker().clone();
             let event_id = REACTOR.register(self.fd, IoOp::Write, &mut self.buffer, waker);
             self.event_id = Some(event_id);

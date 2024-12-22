@@ -1,18 +1,17 @@
 
-# Async IO with io_uring in Rust
+# Rust下的异步IO
 
-This project provides an asynchronous I/O framework in Rust using the `io_uring` library. It supports performing I/O operations like `read` and `write` asynchronously, utilizing a reactor pattern to manage events efficiently.
+这个项目使用 Rust 提供了基于`io_uring`的一个异步 I/O 框架。它支持执行 I/O 操作，例如`read`和`write`异步地，利用executor模式来有效地管理事件。
 
-## Features
+## 特征
 
-- **Async I/O Operations**: Perform non-blocking read and write operations asynchronously.
-- **Reactor Pattern**: Efficiently manage multiple I/O events using a global reactor that integrates with `io_uring`.
-- **Lightweight Executor**: A simple executor for running asynchronous tasks.
-- **Efficient Event Handling**: Uses `io_uring` for optimized event submission and completion, allowing high-performance I/O operations.
+-**异步 I/O 操作**：异步执行非阻塞读写操作。
+-**反应器模式**：使用与“io_uring”集成的全局反应器有效管理多个 I/O 事件。
+-**轻量级执行器**：用于运行异步任务的简单执行器。
+-**高效的事件处理**：使用 `io_uring` 来优化事件提交和完成，从而实现高性能 I/O 操作。
 
-## Installation
-
-Add the following to your `Cargo.toml`:
+## 安装
+将以下内容添加到您的“Cargo.toml”中：
 
 ```toml
 [dependencies]
@@ -21,11 +20,10 @@ tokio = { version = "1", features = ["full"] }
 io-uring = "0.7"
 ```
 
-## Usage
+## 用法
 
-The framework provides functions to perform `read` and `write` operations asynchronously. Here's an example of how to use the `read` and `write` functions:
-
-### Asynchronous Read Example
+该框架提供了异步执行“读”和“写”操作的函数。以下是如何使用“read”和“write”函数的示例：
+### 异步读取示例
 
 ```rust
 use std::os::unix::io::RawFd;
@@ -45,7 +43,7 @@ async fn main() -> io::Result<()> {
 }
 ```
 
-### Asynchronous Write Example
+### 异步写入示例
 
 ```rust
 use std::os::unix::io::RawFd;
@@ -62,7 +60,7 @@ async fn main() -> io::Result<()> {
 }
 ```
 
-## How it Works
+## 它是如何工作的
 
 ### Reactor
 
@@ -114,15 +112,14 @@ impl Executor {
 
 ### `AsyncReadFuture` and `AsyncWriteFuture`
 
-- The `AsyncReadFuture` is used to read data asynchronously. It registers a read operation with the `Reactor` and awaits its completion.
-- The `AsyncWriteFuture` is used to write data asynchronously. Similar to `AsyncReadFuture`, it registers a write operation and waits for it to complete.
+-`AsyncReadFuture` 用于异步读取数据。它向“Reactor”注册一个读操作并等待其完成。
+-`AsyncWriteFuture` 用于异步写入数据。与`AsyncReadFuture`类似，它注册一个写操作并等待它完成。
 
 Both of these futures leverage `poll` to handle the registration of the I/O operations and their subsequent completion.
 
-### Registering Events
+### 注册事件
 
-To register a read or write event, you can use the `register` method on the `Reactor`. This will initiate the I/O operation and provide a unique `event_id` that you can use to track the completion of the event.
-
+要注册读或写事件，您可以使用“Reactor”上的“register”方法。这将启动 I/O 操作并提供一个唯一的“event_id”，您可以使用它来跟踪事件的完成情况。
 ```rust
 pub fn register(&self, fd: RawFd, op: IoOp, buffer: &mut [u8], waker: Waker) -> u64 {
     let mut uring = self.uring.lock().unwrap();
@@ -156,9 +153,9 @@ pub fn register(&self, fd: RawFd, op: IoOp, buffer: &mut [u8], waker: Waker) -> 
 }
 ```
 
-### Waiting for Completion
+### 等待完成
 
-Once the I/O operation is completed, you can check the completion status using the `wait` method. This method will process the completion queue and notify the corresponding `Waker` to resume the associated future.
+一旦 I/O 操作完成，您可以使用 wait 方法检查完成状态。该方法将处理完成队列并通知相应的“Waker”恢复关联的 future。
 
 ```rust
 pub fn wait(&self) {
@@ -181,11 +178,3 @@ pub fn wait(&self) {
     }
 }
 ```
-
-## Contributing
-
-Feel free to open issues and pull requests if you'd like to contribute to this project!
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

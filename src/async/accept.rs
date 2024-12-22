@@ -1,49 +1,51 @@
 use crate::reactor::{IoOp, REACTOR};
-use std::io::{self, Read};
-use std::os::unix::io::RawFd;
+use std::os::unix::io::{RawFd, AsRawFd};
 use std::task::{Context, Poll};
 use std::pin::Pin;
 use std::future::Future;
+use std::io::{self, ErrorKind};
 
-/// 异步读取函数，直接调用
-pub fn read(fd: RawFd, buffer: &mut [u8]) -> AsyncReadFuture {
-    AsyncReadFuture::new(fd, buffer)
+/// 异步accept函数，直接调用
+pub fn accept(fd: RawFd) -> AsyncAcceptFuture {
+    AsyncAcceptFuture::new(fd)
 }
 
-pub struct AsyncReadFuture<'a> {
+pub struct AsyncAcceptFuture {
     fd: RawFd,
-    buffer: &'a mut [u8],
     event_id: Option<u64>,
+    client_fd: Option<RawFd>, // 用来存储新的连接的文件描述符
 }
 
-impl<'a> AsyncReadFuture<'a> {
-    pub fn new(fd: RawFd, buffer: &'a mut [u8]) -> Self {
+impl AsyncAcceptFuture {
+    pub fn new(fd: RawFd) -> Self {
         Self {
             fd,
-            buffer,
             event_id: None,
+            client_fd: None,
         }
     }
 }
 
-impl<'a> Future for AsyncReadFuture<'a> {
-    type Output = io::Result<usize>;
+impl Future for AsyncAcceptFuture {
+    type Output = io::Result<RawFd>; // 返回新的客户端连接的 fd
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // 第一次进入 poll，需要注册异步读取事件
+        // 第一次进入 poll，需要注册异步接收连接事件
         if self.event_id.is_none() {
-            // println!("异步读开始");
             let waker = cx.waker().clone();
-            let event_id = REACTOR.register(self.fd, IoOp::Read, self.buffer, waker);
+            // 向 reactor 注册异步accept事件
+            let event_id = REACTOR.register(self.fd, IoOp::Accept, &mut [], waker);
             self.event_id = Some(event_id);
             return Poll::Pending;
         }
+
         // 检查事件是否完成
         if let Some(event_id) = self.event_id {
             if let Some(result) = REACTOR.is_event_completed(event_id) {
                 match result {
-                    Ok(bytes_read) => {
-                        Poll::Ready(Ok(bytes_read))
+                    Ok(client_fd) => {
+                        self.client_fd = Some(client_fd as RawFd);
+                        Poll::Ready(Ok(client_fd as RawFd))
                     }
                     Err(e) => Poll::Ready(Err(e)),
                 }

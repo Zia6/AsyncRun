@@ -42,7 +42,7 @@ impl Task {
 // 实现 ArcWake，为 `Task` 创建自定义 Waker
 impl ArcWake for Task {
     fn wake_by_ref(arc_self: &Arc<Self>) {
-        println!("Task woke up!");
+        // println!("Task woke up!");
         GLOBAL_EXECUTOR.spawn_task(arc_self.clone());
     }
 }
@@ -62,13 +62,13 @@ impl Executor {
 
     // 添加一个 Future 到任务队列
     pub fn spawn(future: impl Future<Output = ()> + Send + 'static) {
-        println!("push");
+        // println!("push");
         GLOBAL_EXECUTOR.spawn_task(Task::new(future));
     }
 
     // 将 Task 直接加入任务队列
     fn spawn_task(&self, task: Arc<Task>) {
-        println!("push");
+        // println!("push");
         self.queue.lock().unwrap().push_back(task);
     }
 

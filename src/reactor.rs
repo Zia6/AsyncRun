@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet};
 use std::io;
 use std::os::unix::io::RawFd;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::task::Waker;
 use std::thread;
 use std::time::Duration;
@@ -14,6 +14,7 @@ static NEXT_USER_DATA: AtomicU64 = AtomicU64::new(1);
 pub enum IoOp {
     Read,
     Write,
+    Accept,  // 增加 Accept 类型
 }
 
 // Reactor，用于管理异步 I/O
@@ -23,6 +24,7 @@ pub struct Reactor {
     completed_events: Mutex<HashMap<u64, io::Result<usize>>>, // 完成的事件ID -> 结果
     client: Mutex<HashMap<i32,u64>>,  // 用于等待的事件ID
     epoll_fd: RawFd,
+    epoll_events: RwLock<Vec<epoll::Event>>, // 使用 RwLock 包裹 epoll_events,不然无法修改
 }
 
 impl Reactor {
@@ -36,6 +38,7 @@ impl Reactor {
             waiters: Mutex::new(HashMap::new()),
             completed_events: Mutex::new(HashMap::new()),
             client: Mutex::new(HashMap::new()),
+            epoll_events: Vec::with_capacity(1024).into(),
         }
     }
 
@@ -61,6 +64,13 @@ impl Reactor {
                 )
                 .build()
                 .user_data(event_id),
+                IoOp::Accept => io_uring::opcode::Accept::new(
+                    io_uring::types::Fd(fd),
+                    std::ptr::null_mut(),
+                    std::ptr::null_mut(),
+                )
+                .build()
+                .user_data(event_id),
             };
 
             sq.push(&entry).expect("Failed to submit I/O operation");
@@ -77,7 +87,8 @@ impl Reactor {
         let mut uring = self.uring.lock().unwrap();
         let cq = uring.completion();
         let mut waiters = self.waiters.lock().unwrap();
-
+        let mut epoll_events = self.epoll_events.write().unwrap();
+        let mut client = self.client.lock().unwrap();
         // 检查完成队列
         for cqe in cq {
             println!("Event completed: user_data={}", cqe.result());
@@ -99,6 +110,16 @@ impl Reactor {
                 println!("No waker found for user_data={}", cqe.user_data());
             }
         }
+        let _ = epoll::wait(self.epoll_fd, 1000, &mut epoll_events);
+        for event in epoll_events.iter() {
+            let fd = event.data as i32;
+            if let Some(waker) = waiters.get(client.get(&fd).unwrap()) {
+                waker.clone().wake();
+            } else {
+                println!("No waker found for user_data={}", fd);
+            }
+
+        }
     }
 
     // 检查事件是否已完成，返回操作结果
@@ -111,7 +132,7 @@ impl Reactor {
         let event_id = NEXT_USER_DATA.fetch_add(1, Ordering::SeqCst); // 生成唯一 ID
         let mut client = self.client.lock().unwrap();
         client.insert(fd,event_id);
-        epoll::ctl(
+        let _ = epoll::ctl(
             self.epoll_fd,
             epoll::ControlOptions::EPOLL_CTL_ADD,
             fd,
@@ -127,13 +148,31 @@ impl Reactor {
     pub fn register_epoll(&self, fd: RawFd,event_id: u64) -> u64 {
         let mut client = self.client.lock().unwrap();
         client.insert(fd,event_id);
-        epoll::ctl(
+        let _ = epoll::ctl(
             self.epoll_fd,
             epoll::ControlOptions::EPOLL_CTL_ADD,
             fd,
             epoll::Event::new(epoll::Events::EPOLLIN, event_id),
         );
         event_id
+    }
+
+    //返回当前epoll_events的len()
+    pub fn is_event_completed_epoll(&self) -> usize {
+        let epoll_events = self.epoll_events.read().unwrap();
+        epoll_events.len()
+    }
+
+    //返回当前epoll_events的clone()
+    pub fn get_epoll_events(&self) -> Vec<epoll::Event> {
+        let epoll_events = self.epoll_events.read().unwrap();
+        epoll_events.clone()
+    }
+
+    // 将event清空
+    pub fn clear_epoll_events(&self) {
+        let mut epoll_events = self.epoll_events.write().unwrap();
+        epoll_events.clear();
     }
 }
 
