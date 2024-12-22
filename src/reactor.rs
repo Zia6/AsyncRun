@@ -21,16 +21,21 @@ pub struct Reactor {
     uring: Mutex<IoUring>,               // io_uring 实例
     waiters: Mutex<HashMap<u64, Waker>>,  // 事件ID -> Waker 映射
     completed_events: Mutex<HashMap<u64, io::Result<usize>>>, // 完成的事件ID -> 结果
+    client: Mutex<HashMap<i32,u64>>,  // 用于等待的事件ID
+    epoll_fd: RawFd,
 }
 
 impl Reactor {
     // 创建新的 Reactor
     pub fn new() -> Self {
+        let epoll_fd = epoll::create(true).expect("Failed to create epoll instance");
         let uring = IoUring::new(256).expect("Failed to create io_uring");
         Self {
+            epoll_fd: epoll_fd,
             uring: Mutex::new(uring),
             waiters: Mutex::new(HashMap::new()),
             completed_events: Mutex::new(HashMap::new()),
+            client: Mutex::new(HashMap::new()),
         }
     }
 
@@ -100,6 +105,35 @@ impl Reactor {
     pub fn is_event_completed(&self, event_id: u64) -> Option<io::Result<usize>> {
         let mut completed_events = self.completed_events.lock().unwrap();
         completed_events.remove(&event_id)
+    }
+
+    pub fn register_tcp(&self, fd: RawFd) -> u64 {
+        let event_id = NEXT_USER_DATA.fetch_add(1, Ordering::SeqCst); // 生成唯一 ID
+        let mut client = self.client.lock().unwrap();
+        client.insert(fd,event_id);
+        epoll::ctl(
+            self.epoll_fd,
+            epoll::ControlOptions::EPOLL_CTL_ADD,
+            fd,
+            epoll::Event::new(epoll::Events::EPOLLIN, event_id),
+        );
+        event_id
+    }
+    pub fn modify_waker(&self, event_id: u64,waker: Waker) {
+        let mut waiters = self.waiters.lock().unwrap();
+        waiters.insert(event_id, waker);
+    }
+
+    pub fn register_epoll(&self, fd: RawFd,event_id: u64) -> u64 {
+        let mut client = self.client.lock().unwrap();
+        client.insert(fd,event_id);
+        epoll::ctl(
+            self.epoll_fd,
+            epoll::ControlOptions::EPOLL_CTL_ADD,
+            fd,
+            epoll::Event::new(epoll::Events::EPOLLIN, event_id),
+        );
+        event_id
     }
 }
 
