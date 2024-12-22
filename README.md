@@ -64,9 +64,9 @@ async fn main() -> io::Result<()> {
 
 ### Reactor
 
-The `Reactor` is responsible for registering and managing I/O events using `io_uring`. It provides a mechanism for submitting I/O operations (like read and write) and waiting for them to complete. Once an event completes, the reactor notifies the appropriate `Waker` to resume the corresponding future.
+Reactor` 负责使用 `io_uring` 注册和管理 I/O 事件。它提供了一种提交 I/O 操作（如读取和写入）并等待它们完成的机制。一旦事件完成，反应器就会通知相应的“Waker”以恢复相应的未来。
 
-The `Reactor` manages the I/O submission queue (`SubmissionQueue`), the completion queue (`CompletionQueue`), and the event handlers. It utilizes `io_uring` for efficient event-driven programming.
+`Reactor` 管理 I/O 提交队列 (`SubmissionQueue`)、完成队列 (`CompletionQueue`) 和事件处理程序。它利用“io_uring”进行高效的事件驱动编程。
 
 ```rust
 pub struct Reactor {
@@ -78,7 +78,7 @@ pub struct Reactor {
 
 ### Executor
 
-The `Executor` is a simple task executor that allows you to spawn asynchronous tasks. It works by managing the futures and polling them until completion.
+`Executor` 是一个简单的任务执行器，允许您生成异步任务。它的工作原理是管理 future 并轮询它们直到完成。
 
 ```rust
 pub struct Executor {
